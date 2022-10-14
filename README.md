@@ -1,1 +1,0 @@
-# Left_Atrium_QC
