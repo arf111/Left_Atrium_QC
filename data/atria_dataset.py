@@ -19,9 +19,9 @@ from data.custom_transformer import CropPad
 class AtriaDataset(Dataset):
     """Read the nrrd files from dataset folder and return the data and label"""
 
-    def __init__(self, root_dir, input_h=224, input_w=224, orientation=0, sequence_length=1, if_clahe=False,
+    def __init__(self, root_dir, split_name, input_h=224, input_w=224, orientation=0, sequence_length=1, if_clahe=False,
                  transform=False):
-        dataset_dir = os.path.join(root_dir, 'training_set')
+        dataset_dir = os.path.join(root_dir, split_name)
         self.patient_list = os.listdir(dataset_dir)
         self.patient_path_list = sorted([os.path.join(dataset_dir, pid) for pid in self.patient_list])
         self.data_size = len(self.patient_path_list)
