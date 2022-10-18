@@ -8,7 +8,8 @@ from monai.data import Dataset, DataLoader, NrrdReader
 from monai.networks.nets import get_efficientnet_image_size
 from monai.transforms import Affine
 from skimage.exposure import equalize_adapthist
-from torchvision.transforms import Compose, RandomVerticalFlip, RandomHorizontalFlip, Resize
+from torchvision.transforms import Compose, RandomVerticalFlip, RandomHorizontalFlip, ToPILImage, ToTensor, Normalize, \
+    RandomResizedCrop
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
@@ -59,15 +60,7 @@ class AtriaDataset(Dataset):
         # if self.if_clahe:
         #     img = temp_input
 
-        new_input = self.pair_transform(img)
-
-        # normalize data
-        new_input_mean = np.mean(new_input, axis=(1, 2), keepdims=True)
-        new_input -= new_input_mean
-        new_std = np.std(new_input, axis=(1, 2), keepdims=True)
-        new_input /= new_std + 0.00000000001
-
-        input = torch.from_numpy(new_input).float()
+        input = self.pair_transform(img)
         target = torch.randint(0, 5, (1,))
 
         return {'input': input, 'target': target}
@@ -77,17 +70,17 @@ class AtriaDataset(Dataset):
 
     def pair_transform(self, image, input_h=256, input_w=256):
         # print('fd:',image.shape)
-        result_image = np.zeros((image.shape[0], input_h, input_w), dtype=np.float32)
+        # result_image = np.zeros((image.shape[0], input_h, input_w), dtype=np.float32)
+        result_image = image.transpose((1, 2, 0))
 
         # data augmentation
-        # data_aug = Compose([RandomVerticalFlip(), RandomHorizontalFlip(), Affine()])
-        # if self.transform:
-        #     image = data_aug(image)
+        data_aug = Compose([ToPILImage(), RandomResizedCrop(input_h), RandomHorizontalFlip(),
+                            ToTensor(), Normalize((0.5,), (0.5,))])
+        if self.transform:
+            result_image = data_aug(result_image)
 
-        CPad = CropPad(input_h, input_w)
-
-        for i in range(result_image.shape[0]):
-            result_image[i] = CPad(image[i])
+        # for i in range(result_image.shape[0]):
+        #     result_image[i] = CPad(image[i])
 
         return result_image
 
@@ -97,13 +90,14 @@ if __name__ == '__main__':
     torch.cuda.set_device(0)
 
     for rnd in range(100):
-        train_dataset = AtriaDataset(root_dir, if_clahe=True, input_h=512, input_w=480, orientation=0, transform=False)
+        train_dataset = AtriaDataset(root_dir, split_name="training_set", if_clahe=True, input_h=512, input_w=480,
+                                     orientation=0, transform=True)
         train_loader = DataLoader(dataset=train_dataset, num_workers=4, batch_size=4, shuffle=True)
         n = 0
         for epoch_iter, data in tqdm(enumerate(train_loader, 1), total=len(train_loader)):
             print(epoch_iter)
-            print(data['input'].shape)  # 10*224*224*1
-            print(data['target'])
+            # print(data['input'].shape)  # 10*224*224*1
+            # print(data['target'])
 
             if n == 0:
                 plt.imshow(data['input'][0, 0, :, :], cmap='gray')
