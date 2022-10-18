@@ -12,10 +12,10 @@ NUM_CLASSES = 5
 
 if __name__ == "__main__":
     root_dir = 'dataset'
-    train_dataset = AtriaDataset(root_dir, split_name="training_set", if_clahe=True, input_h=512, input_w=480, orientation=0, transform=False)
+    train_dataset = AtriaDataset(root_dir, split_name="training_set", if_clahe=True, input_h=512, input_w=480, orientation=0, transform=True)
     train_loader = DataLoader(dataset=train_dataset, num_workers=4, batch_size=4, shuffle=True)
 
-    test_dataset = AtriaDataset(root_dir, split_name="testing_set", if_clahe=True, input_h=512, input_w=480, orientation=0, transform=False)
+    test_dataset = AtriaDataset(root_dir, split_name="testing_set", if_clahe=True, input_h=512, input_w=480, orientation=0, transform=True)
     test_loader = DataLoader(dataset=test_dataset, num_workers=4, batch_size=4, shuffle=True)
 
     # device
