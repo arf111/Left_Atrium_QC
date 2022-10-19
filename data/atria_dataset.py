@@ -1,103 +1,60 @@
-import datetime
 import os
-import random
 
-import numpy as np
+import pandas as pd
 import torch
-from monai.data import Dataset, DataLoader, NrrdReader
-from monai.networks.nets import get_efficientnet_image_size
-from monai.transforms import Affine
-from skimage.exposure import equalize_adapthist
-from torchvision.transforms import Compose, RandomVerticalFlip, RandomHorizontalFlip, ToPILImage, ToTensor, Normalize, \
+from monai.data import Dataset, DataLoader
+from torchvision.transforms import Compose, RandomHorizontalFlip, ToTensor, Normalize, \
     RandomResizedCrop
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from PIL import Image
-from data.custom_transformer import CropPad
 
 
 class AtriaDataset(Dataset):
-    """Read the nrrd files from dataset folder and return the data and label"""
+    """Read the files from dataset folder and return the data and label"""
 
-    def __init__(self, root_dir, split_name, input_h=224, input_w=224, orientation=0, sequence_length=1, if_clahe=False,
-                 transform=False):
+    def __init__(self, root_dir, split_name, transform=None):
         dataset_dir = os.path.join(root_dir, split_name)
+        dataframe = pd.read_csv(os.path.join(root_dir, f'{split_name}_labels.csv'))
+
         self.patient_list = os.listdir(dataset_dir)
-        self.patient_path_list = sorted([os.path.join(dataset_dir, pid) for pid in self.patient_list])
-        self.data_size = len(self.patient_path_list)
+        self.patient_mri_images_path_list = sorted(
+            [(os.path.join(dataset_dir, pid, f"{i}.png"), int(dataframe[dataframe['filenames'] == pid][f"{i}"])) for i in range(88)
+             for pid in dataframe['filenames']])
+
+        self.data_size = len(self.patient_mri_images_path_list)
 
         self.transform = transform
-        self.input_h = input_h
-        self.input_w = input_w
-
-        self.if_clahe = if_clahe
-        self.orientation = orientation
-        self.sequence_length = sequence_length
 
     def __getitem__(self, index):
-        # read the nrrd file
-        nrrd_reader = NrrdReader()
+        img = Image.open(self.patient_mri_images_path_list[index][0])
+        target = torch.tensor(self.patient_mri_images_path_list[index][1], dtype=torch.int8)
 
-        img_obj = nrrd_reader.read(os.path.join(self.patient_path_list[index], 'lgemri.nrrd'))
-        img, _ = nrrd_reader.get_data(img_obj)
+        if self.transform:
+            img = self.transform(img)
 
-        slice_id = 0
-
-        # slicing the image at given orientation
-        if self.orientation == 0:
-            img = img.transpose((2, 1, 0))
-            slice_id = np.random.randint(0, img.shape[0])
-
-        img = img[[slice_id], :, :]
-        # temp_input = np.zeros(img.shape, dtype=np.float)
-
-        # for i in range(img.shape[0]):
-        #     if self.if_clahe:
-        #         new_input = equalize_adapthist(img[i])
-        #         temp_input[i] = new_input
-        #
-        # if self.if_clahe:
-        #     img = temp_input
-
-        input = self.pair_transform(img)
-        target = torch.randint(0, 5, (1,))
-
-        return {'input': input, 'target': target}
+        return {'input': img, 'target': target}
 
     def __len__(self):
         return self.data_size
-
-    def pair_transform(self, image, input_h=256, input_w=256):
-        # print('fd:',image.shape)
-        # result_image = np.zeros((image.shape[0], input_h, input_w), dtype=np.float32)
-        result_image = image.transpose((1, 2, 0))
-
-        # data augmentation
-        data_aug = Compose([ToPILImage(), RandomResizedCrop(input_h), RandomHorizontalFlip(),
-                            ToTensor(), Normalize((0.5,), (0.5,))])
-        if self.transform:
-            result_image = data_aug(result_image)
-
-        # for i in range(result_image.shape[0]):
-        #     result_image[i] = CPad(image[i])
-
-        return result_image
 
 
 if __name__ == '__main__':
     root_dir = '../dataset'
     torch.cuda.set_device(0)
 
+    train_transform = Compose([RandomResizedCrop(256), RandomHorizontalFlip(),
+                               ToTensor(), Normalize((0.5,), (0.5,))])
+
     for rnd in range(100):
-        train_dataset = AtriaDataset(root_dir, split_name="training_set", if_clahe=True, input_h=512, input_w=480,
-                                     orientation=0, transform=True)
+        train_dataset = AtriaDataset(root_dir, split_name="training_set", transform=train_transform)
         train_loader = DataLoader(dataset=train_dataset, num_workers=4, batch_size=4, shuffle=True)
         n = 0
         for epoch_iter, data in tqdm(enumerate(train_loader, 1), total=len(train_loader)):
-            print(epoch_iter)
-            # print(data['input'].shape)  # 10*224*224*1
-            # print(data['target'])
+            # print(epoch_iter)
+            print(data['input'].shape)  # 10*224*224*1
+            print(data['target'].shape)
 
             if n == 0:
                 plt.imshow(data['input'][0, 0, :, :], cmap='gray')
@@ -105,5 +62,3 @@ if __name__ == '__main__':
                 plt.imshow(data['input'][1, 0, :, :], cmap='gray')
                 plt.show()  #
             n += 1
-
-    image_size = get_efficientnet_image_size("efficientnet-b0")

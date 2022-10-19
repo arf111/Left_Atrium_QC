@@ -17,14 +17,12 @@ class QCModel(nn.Module):
             nn.AdaptiveAvgPool2d(output_size=(1, 1))
         )
 
-        ### Specify CORN layer
         self.output_layer = nn.Linear(in_features=2048, out_features=num_classes - 1)
 
     def forward(self, x):
         x = self.model(x)
         x = x.view(x.size(0), -1)  # flatten
 
-        ##### Use CORN layer #####
         logits = self.output_layer(x)
 
         return logits
