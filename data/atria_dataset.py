@@ -20,8 +20,8 @@ class AtriaDataset(Dataset):
 
         self.patient_list = os.listdir(dataset_dir)
         self.patient_mri_images_path_list = sorted(
-            [(os.path.join(dataset_dir, pid, f"{i}.png"), int(dataframe[dataframe['filenames'] == pid][f"{i}"])) for i in range(88)
-             for pid in dataframe['filenames']])
+            [(os.path.join(dataset_dir, pid, f"{slice}.png"), int(dataframe[dataframe['filenames'] == pid][f"{slice}"]))
+             for slice in range(88) for pid in self.patient_list])
 
         self.data_size = len(self.patient_mri_images_path_list)
 
@@ -48,7 +48,7 @@ if __name__ == '__main__':
                                ToTensor(), Normalize((0.5,), (0.5,))])
 
     for rnd in range(100):
-        train_dataset = AtriaDataset(root_dir, split_name="training_set", transform=train_transform)
+        train_dataset = AtriaDataset(root_dir, split_name="training_set2", transform=train_transform)
         train_loader = DataLoader(dataset=train_dataset, num_workers=4, batch_size=4, shuffle=True)
         n = 0
         for epoch_iter, data in tqdm(enumerate(train_loader, 1), total=len(train_loader)):
