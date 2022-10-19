@@ -20,10 +20,10 @@ if __name__ == "__main__":
     test_transform = Compose([Resize(RESIZE_IMG), ToTensor(), Normalize((0.5,), (0.5,))])
 
     train_dataset = AtriaDataset(root_dir, split_name="training_set", transform=train_transform)
-    train_loader = DataLoader(dataset=train_dataset, num_workers=4, batch_size=4, shuffle=True)
+    train_loader = DataLoader(dataset=train_dataset, num_workers=8, batch_size=16, shuffle=True)
 
     test_dataset = AtriaDataset(root_dir, split_name="testing_set", transform=test_transform)
-    test_loader = DataLoader(dataset=test_dataset, num_workers=4, batch_size=4, shuffle=True)
+    test_loader = DataLoader(dataset=test_dataset, num_workers=8, batch_size=16, shuffle=True)
 
     # device
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -47,4 +47,4 @@ if __name__ == "__main__":
     dataset_sizes = {"train": len(train_dataset), "test": len(test_dataset)}
 
     best_model = train_model(model=qc_model, dataloaders=dataloaders, dataset_sizes=dataset_sizes, optimizer=optimizer,
-                             scheduler=scheduler, device=device, num_epochs=1, num_classes=NUM_CLASSES)
+                             scheduler=scheduler, device=device, num_epochs=2, num_classes=NUM_CLASSES)
