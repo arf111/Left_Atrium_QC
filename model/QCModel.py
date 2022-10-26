@@ -12,18 +12,23 @@ class QCModel(nn.Module):
         for p in features.parameters():
             p.requires_grad = False
 
-        self.model = nn.Sequential(
-            features,
-            nn.AdaptiveAvgPool2d(output_size=(1, 1))
+        self.features = nn.Sequential(
+            features
         )
 
-        self.output_layer = nn.Linear(in_features=2048, out_features=num_classes - 1)
+        self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.linear1 = nn.Linear(2048, 512)
+        self.linear2 = nn.Linear(512, 128)
+        self.output_layer = nn.Linear(128, num_classes - 1)
 
     def forward(self, x):
-        x = self.model(x)
-        x = x.view(x.size(0), -1)  # flatten
+        x = self.features(x)  # (batch_size, 2048, 16, 15)
+        x = self.adaptive_pool(x)  # (batch_size, 2048, 1, 1)
+        x = x.view(x.size(0), -1)  # flatten (batch_size, 2048)
+        x = self.linear1(x)  # output shape: (batch_size, 512)
+        x = self.linear2(x)  # output shape: (batch_size, 128)
 
-        logits = self.output_layer(x)
+        logits = self.output_layer(x)  # output shape: (batch_size, num_classes-1)
 
         return logits
 
