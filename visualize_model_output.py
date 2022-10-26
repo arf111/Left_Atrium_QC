@@ -1,41 +1,12 @@
 import numpy as np
 import torch
-from PIL import Image
-from coral_pytorch.dataset import corn_label_from_logits
-from torchvision.transforms import ToTensor, Compose, Resize, Normalize
 import segmentation_models_pytorch as smp
 
 from model.QCModel import QCModel
-
-RESIZE_IMG = 256
-
-
-def get_model_output(image_filename, model):
-    """
-    Get the output of a model on a single image
-    :param image_filename: filename of the image to visualize
-    :param model: model to visualize
-    :return: int, the predicted class
-    """
-    # Load the image
-    image = Image.open(image_filename)
-    test_transform = Compose([Resize(RESIZE_IMG), ToTensor(), Normalize((0.5,), (0.5,))])
-    image = test_transform(image)
-    image = image.unsqueeze(0)
-
-    # Get the model output
-    model.eval()
-    with torch.no_grad():
-        output = model(image)
-
-    # Get the predicted class
-    preds = corn_label_from_logits(output).float()
-
-    return preds.item()
-
+from train_qc_model import get_dataloader
+from util.utils import get_true_vs_predicted_values, plot_confusion_matrix
 
 if __name__ == "__main__":
-
     # Load the weights of the model
     model = smp.Unet(
         encoder_name="resnet50",  # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
@@ -47,6 +18,18 @@ if __name__ == "__main__":
     qc_model = QCModel(model.encoder, 5)
     qc_model.load_state_dict(torch.load('model/saved_models/best_model.pth'))
 
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
     # Get the model output
-    predicted_score = get_model_output("dataset/testing_set/4URSJYI2QUH1T5S5PP47/80.png", qc_model)
-    print(predicted_score)
+    # predicted_score = get_model_output("dataset/testing_set/8ISA3BO39HPSNJI0R8NH/38.png", qc_model)
+    # print(predicted_score)
+
+    train_loader, val_loader = get_dataloader("dataset")
+
+    # Plot the confusion matrix of training set
+    true_labels, pred_labels = get_true_vs_predicted_values(train_loader, qc_model)
+    plot_confusion_matrix(true_labels, pred_labels, "train_confusion_matrix")
+
+    # Plot the confusion matrix of testing set
+    true_labels, pred_labels = get_true_vs_predicted_values(val_loader, qc_model)
+    plot_confusion_matrix(true_labels, pred_labels, "test_confusion_matrix")
