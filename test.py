@@ -18,6 +18,6 @@ def test_model(dataloader, model, device):
             mae += torch.sum(torch.abs(predicted_labels - targets))
             mse += torch.sum((predicted_labels - targets) ** 2)
 
-        mae = mae / num_examples
-        mse = mse / num_examples
+        mae = mae / len(dataloader)
+        mse = mse / len(dataloader)
         return mae, mse
