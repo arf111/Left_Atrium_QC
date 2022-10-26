@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import torch
 from monai.data import Dataset, DataLoader
-from torchvision.transforms import Compose, RandomHorizontalFlip, ToTensor, Normalize, \
+from torchvision.transforms import Compose, RandomHorizontalFlip, ToTensor, \
     RandomResizedCrop
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -31,6 +31,8 @@ class AtriaDataset(Dataset):
         img = Image.open(self.patient_mri_images_path_list[index][0])
         target = torch.tensor(self.patient_mri_images_path_list[index][1], dtype=torch.int8)
 
+        # Image.values are in range [0, 255], shape is (640, 640) or (512, 512)
+
         if self.transform:
             img = self.transform(img)
 
@@ -44,8 +46,7 @@ if __name__ == '__main__':
     root_dir = '../dataset'
     torch.cuda.set_device(0)
 
-    train_transform = Compose([RandomResizedCrop(256), RandomHorizontalFlip(),
-                               ToTensor(), Normalize((0.5,), (0.5,))])
+    train_transform = Compose([RandomResizedCrop(256), RandomHorizontalFlip(),ToTensor()])
 
     for rnd in range(100):
         train_dataset = AtriaDataset(root_dir, split_name="training_set2", transform=train_transform)
