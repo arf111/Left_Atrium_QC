@@ -19,6 +19,7 @@ class QCModel(nn.Module):
         self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
         self.linear1 = nn.Linear(2048, 512)
         self.linear2 = nn.Linear(512, 128)
+        self.relu = nn.ReLU()
         self.output_layer = nn.Linear(128, num_classes - 1)
 
     def forward(self, x):
@@ -26,7 +27,9 @@ class QCModel(nn.Module):
         x = self.adaptive_pool(x)  # (batch_size, 2048, 1, 1)
         x = x.view(x.size(0), -1)  # flatten (batch_size, 2048)
         x = self.linear1(x)  # output shape: (batch_size, 512)
+        x = self.relu(x)  # Non-linearity
         x = self.linear2(x)  # output shape: (batch_size, 128)
+        x = self.relu(x)  # Non-linearity
 
         logits = self.output_layer(x)  # output shape: (batch_size, num_classes-1)
 
