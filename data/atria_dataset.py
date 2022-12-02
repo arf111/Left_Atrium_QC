@@ -36,7 +36,7 @@ class AtriaDataset(Dataset):
         if self.transform:
             img = self.transform(img)
 
-        return {'input': img, 'target': target}
+        return {'input': img, 'target': target - 1}
 
     def __len__(self):
         return self.data_size
