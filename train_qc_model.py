@@ -16,22 +16,23 @@ from tqdm import tqdm
 
 NUM_CLASSES = 5
 RESIZE_IMG = 256
-NUM_EPOCHS = 25
+NUM_EPOCHS = 60
 
 resnet_families = ['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152']
 mobile_net_families = ['mobilenet_v2', 'timm-mobilenetv3_large_075', 'timm-mobilenetv3_large_100',
                        'timm-mobilenetv3_large_minimal_100', 'timm-mobilenetv3_small_075',
                        'timm-mobilenetv3_small_100', 'timm-mobilenetv3_small_minimal_100']
-efficient_net_families = ['efficientnet-b0', 'efficientnet-b1', 'efficientnet-b2', 'efficientnet-b3', 'efficientnet-b4',
-                          'efficientnet-b5', 'efficientnet-b6', 'efficientnet-b7']
+efficient_net_families = ['efficientnet-b0', 
+                         'efficientnet-b1', 'efficientnet-b2', 'efficientnet-b3', 'efficientnet-b4',
+                          'efficientnet-b5', 'efficientnet-b6', 'efficientnet-b7'
+                        ]
 
-model_families_dict = {'resnet': resnet_families, 'mobilenet': mobile_net_families,
-                       'efficientnet': efficient_net_families}
+model_families_dict = {'efficientnet': efficient_net_families}
 
 if __name__ == "__main__":
     root_dir = Path('dataset/afib_data')
 
-    train_loader, val_loader = get_dataloader(root_dir, AfibDataset)
+    train_loader, val_loader = get_dataloader(root_dir, AfibDataset) # training = 444
 
     # device
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -55,7 +56,7 @@ if __name__ == "__main__":
             optimizer = optim.SGD(qc_model.parameters(), lr=0.001, momentum=0.99, weight_decay=0.0005)
 
             # scheduler
-            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.5)
+            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.5)
 
             dataloaders = {"train": train_loader, "val": val_loader}
             dataset_sizes = {"train": len(train_loader.dataset), "val": len(val_loader.dataset)}
@@ -66,18 +67,45 @@ if __name__ == "__main__":
                 scheduler=scheduler, device=device,
                 num_epochs=NUM_EPOCHS, num_classes=NUM_CLASSES)
 
+            print("Making dict of model with loss and mse")
             dict_of_model_with_loss_and_mse[f"{model_name}_train_loss"] = all_epochs_loss['train']
             dict_of_model_with_loss_and_mse[f"{model_name}_val_loss"] = all_epochs_loss['val']
-            dict_of_model_with_loss_and_mse[f"{model_name}_train_mse"] = all_epochs_mse['train']
-            dict_of_model_with_loss_and_mse[f"{model_name}_val_mse"] = all_epochs_mse['val']
-            dict_of_model_with_loss_and_mse[f"{model_name}_train_true_labels"] = train_true_labels
-            dict_of_model_with_loss_and_mse[f"{model_name}_train_pred_labels"] = train_pred_labels
-            dict_of_model_with_loss_and_mse[f"{model_name}_val_true_labels"] = val_true_labels
-            dict_of_model_with_loss_and_mse[f"{model_name}_val_pred_labels"] = val_pred_labels
-            dict_of_model_with_loss_and_mse[f"{model_name}_best_mse"] = best_mse
+            
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_sharpness_attribute_mse"] = [x['sharpness_attribute'] for x in all_epochs_mse['train']]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_sharpness_attribute_mse"] = [x['sharpness_attribute'] for x in all_epochs_mse['val']]
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_myocardium_nulling_attribute_mse"] = [x['myocardium_nulling_attribute'] for x in all_epochs_mse['train']]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_myocardium_nulling_attribute_mse"] = [x['myocardium_nulling_attribute'] for x in all_epochs_mse['val']]
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_fibrosis_tissue_enhancement_attribute_mse"] = [x['fibrosis_tissue_enhancement_attribute'] for x in all_epochs_mse['train']]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_fibrosis_tissue_enhancement_attribute_mse"] = [x['fibrosis_tissue_enhancement_attribute'] for x in all_epochs_mse['val']]
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_overall_mse"] = [x['overall'] for x in all_epochs_mse['train']]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_overall_mse"] = [x['overall'] for x in all_epochs_mse['val']]
 
-            print(
-                "-----------------------------------------------------------------------------------------------------")
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_true_labels_sharpness"] = train_true_labels["sharpness"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_true_labels_myocardium_nulling"] = train_true_labels["myocardium_nulling"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_true_labels_fibrosis_tissue_enhancement"] = train_true_labels["enhancement_of_fibrosis_tissue"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_true_labels_overall"] = train_true_labels["overall"]
+            
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_pred_labels_sharpness"] = train_pred_labels["sharpness"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_pred_labels_myocardium_nulling"] = train_pred_labels["myocardium_nulling"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_pred_labels_fibrosis_tissue_enhancement"] = train_pred_labels["enhancement_of_fibrosis_tissue"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_train_pred_labels_overall"] = train_pred_labels["overall"]
+            
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_true_labels_sharpness"] = val_true_labels["sharpness"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_true_labels_myocardium_nulling"] = val_true_labels["myocardium_nulling"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_true_labels_fibrosis_tissue_enhancement"] = val_true_labels["enhancement_of_fibrosis_tissue"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_true_labels_overall"] = val_true_labels["overall"]
+
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_pred_labels_sharpness"] = val_pred_labels["sharpness"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_pred_labels_myocardium_nulling"] = val_pred_labels["myocardium_nulling"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_pred_labels_fibrosis_tissue_enhancement"] = val_pred_labels["enhancement_of_fibrosis_tissue"]
+            dict_of_model_with_loss_and_mse[f"{model_name}_val_pred_labels_overall"] = val_pred_labels["overall"]
+
+            print("Finished dict_of_model_with_loss_and_mse")
+            print("-----------------------------------------------------------------------------------------------------")
+    for keys, values in dict_of_model_with_loss_and_mse.items():
+        if len(values) < 444:
+            # fill up the values with 0
+            dict_of_model_with_loss_and_mse[keys] = values + [0] * (444 - len(values))
 
     df = pd.DataFrame(dict_of_model_with_loss_and_mse)
     df.to_csv('results/afib_results.csv')

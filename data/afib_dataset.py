@@ -41,7 +41,7 @@ class AfibDataset(Dataset):
         # convert to float
         img = img.float()
 
-        return {'input': img, 'target': target}  # Number of unique class labels (class labels should start at 0).
+        return {'input': img, 'target': target, "patient_id": self.labels[index]["patient_id"]}  # Number of unique class labels (class labels should start at 0).
 
     def __len__(self):
         return self.data_size

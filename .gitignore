@@ -4,4 +4,3 @@
 
 /data/.ipynb_checkpoints/monai_data_load-checkpoint.ipynb
 /model/saved_models/
-/model/best_model_dice_norm.pth
