@@ -1,4 +1,6 @@
+import os
 from pathlib import Path
+from statistics import mode
 from typing import Dict, List
 
 from collections import defaultdict
@@ -15,6 +17,9 @@ from torchvision.transforms import Compose, Resize, ToTensor, Normalize, RandomH
 
 RESIZE_IMG = 256
 BATCH_SIZE = 32
+
+DATASET_SCORE_FILE = "Image_Quality_Assessment_Whole_Set_Kholmovski.csv"
+
 
 def get_images_with_labels(path, dataframe):
     all_images = []
@@ -33,7 +38,8 @@ def get_images_with_labels(path, dataframe):
                                    "myocardium_nulling":
                                        dataframe[dataframe['Study ID'] == f.stem]['Myocardium Nulling'].values[0],
                                    "overall": int(
-                                       dataframe[dataframe['Study ID'] == f.stem]['Overall Image Quality'].values[0])})
+                                       dataframe[dataframe['Study ID'] == f.stem]['Quality for Fibrosis Assessment'].values[0]),
+                                    "patient_id": f.stem})
     return all_images, labels
 
 
@@ -41,9 +47,9 @@ def get_test_dataloader(root_dir, AfibDataset):
     test_transform = Compose([Resize(RESIZE_IMG), ToTensor()])
 
     dataset_dir = Path(root_dir)
-    dataset_scores_path = dataset_dir / "All_IQ_Scores/Image_Quality_Assessment_BAO.csv"
+    dataset_scores_path = dataset_dir / f"All_IQ_Scores/{DATASET_SCORE_FILE}"
     dataframe = pd.read_csv(dataset_scores_path)
-    dataframe = dataframe.dropna(subset=['Overall Image Quality'])
+    dataframe = dataframe.dropna(subset=['Quality for Fibrosis Assessment'])
     all_images, labels = get_images_with_labels(root_dir / 'test', dataframe)
 
     test_dataset = AfibDataset(all_images, labels, transform=test_transform)
@@ -58,9 +64,9 @@ def get_dataloader(root_dir, AfibDataset):
     val_transform = Compose([Resize(RESIZE_IMG), ToTensor()])
 
     dataset_dir = Path(root_dir)
-    dataset_scores_path = dataset_dir / "All_IQ_Scores/Image_Quality_Assessment_BAO.csv"
+    dataset_scores_path = dataset_dir / f"All_IQ_Scores/{DATASET_SCORE_FILE}"
     dataframe = pd.read_csv(dataset_scores_path)
-    dataframe = dataframe.dropna(subset=['Overall Image Quality'])
+    dataframe = dataframe.dropna(subset=['Quality for Fibrosis Assessment'])
     all_images, labels = get_images_with_labels(root_dir / 'training', dataframe)
 
     train_image_paths, valid_image_paths, train_labels, valid_labels = train_test_split(all_images, labels,
@@ -85,28 +91,59 @@ def get_true_vs_predicted_values(dataloader: DataLoader, model: torch.nn.Module)
     """
     model.eval()
     with torch.no_grad():
+        patient_dict = defaultdict(lambda: defaultdict(list))
         true_labels_dict = defaultdict(list)
         predicted_labels_dict = defaultdict(list)
         for i, data in enumerate(dataloader):
             features, targets = data['input'], data['target']
             logits_of_sharpness_attribute, logits_of_myocardium_nulling_attribute, logits_of_fibrosis_tissue_enhancement_attribute, \
-                        logits_of_overall = model(features)
-            logits_dict = {"sharpness": logits_of_sharpness_attribute, "myocardium_nulling": logits_of_myocardium_nulling_attribute, \
-                            "enhancement_of_fibrosis_tissue": logits_of_fibrosis_tissue_enhancement_attribute, "overall": logits_of_overall}
-
-            true_labels_dict["sharpness"].extend(targets["sharpness"])
-            true_labels_dict["myocardium_nulling"].extend(targets["myocardium_nulling"])
-            true_labels_dict["enhancement_of_fibrosis_tissue"].extend(targets["enhancement_of_fibrosis_tissue"])
-            true_labels_dict["overall"].extend(targets["overall"])
+                logits_of_overall = model(features)
             
-            predicted_labels_dict["sharpness"].extend(corn_label_from_logits(logits_dict["sharpness"]))
-            predicted_labels_dict["myocardium_nulling"].extend(corn_label_from_logits(logits_dict["myocardium_nulling"]))
-            predicted_labels_dict["enhancement_of_fibrosis_tissue"].extend(corn_label_from_logits(logits_dict["enhancement_of_fibrosis_tissue"]))
-            predicted_labels_dict["overall"].extend(corn_label_from_logits(logits_dict["overall"]))
+            overall_labels = targets['overall']
+            sharpness_labels = targets['sharpness']
+            myocardium_nulling_labels = targets['myocardium_nulling']
+            fibrosis_tissue_enhancement_labels = targets['enhancement_of_fibrosis_tissue']
+
+            predicted_logits_of_sharpness_attribute = corn_label_from_logits(logits_of_sharpness_attribute).float().tolist()
+            predicted_logits_of_myocardium_nulling_attribute = corn_label_from_logits(logits_of_myocardium_nulling_attribute).float().tolist()
+            predicted_logits_of_fibrosis_tissue_enhancement_attribute = corn_label_from_logits(logits_of_fibrosis_tissue_enhancement_attribute).float().tolist()
+            predicted_logits_of_overall = corn_label_from_logits(logits_of_overall).float().tolist()
+            
+            for index, patient_id in enumerate(data["patient_id"]):
+                patient_dict[patient_id]['pred_sharpness_attribute'].append(predicted_logits_of_sharpness_attribute[index] + 1)
+                patient_dict[patient_id]['pred_myocardium_nulling_attribute'].append(predicted_logits_of_myocardium_nulling_attribute[index] + 1)
+                patient_dict[patient_id]['pred_fibrosis_tissue_enhancement_attribute'].append(predicted_logits_of_fibrosis_tissue_enhancement_attribute[index] + 1)
+                patient_dict[patient_id]['pred_overall'].append(predicted_logits_of_overall[index] + 1)
+
+                patient_dict[patient_id]['true_sharpness_attribute'].append(sharpness_labels[index].float().item() + 1)
+                patient_dict[patient_id]['true_myocardium_nulling_attribute'].append(myocardium_nulling_labels[index].float().item() + 1)
+                patient_dict[patient_id]['true_fibrosis_tissue_enhancement_attribute'].append(fibrosis_tissue_enhancement_labels[index].float().item() + 1)
+                patient_dict[patient_id]['true_overall'].append(overall_labels[index].float().item() + 1)
 
             # completed data points
             print(f"Completed {i + 1} / {len(dataloader)} batches", end="\r")
 
+    # compute mode from the list of predictions
+        for patient_id in patient_dict.keys():
+            predicted_patients_sharpness_attribute = mode(patient_dict[patient_id]['pred_sharpness_attribute'])
+            predicted_patients_myocardium_nulling_attribute = mode(patient_dict[patient_id]['pred_myocardium_nulling_attribute'])
+            predicted_patients_fibrosis_tissue_enhancement_attribute = mode(patient_dict[patient_id]['pred_fibrosis_tissue_enhancement_attribute'])
+            predicted_patients_overall = mode(patient_dict[patient_id]['pred_overall'])
+
+            true_patients_sharpness_attribute = patient_dict[patient_id]['true_sharpness_attribute'][0]
+            true_patients_myocardium_nulling_attribute = patient_dict[patient_id]['true_myocardium_nulling_attribute'][0]
+            true_patients_fibrosis_tissue_enhancement_attribute = patient_dict[patient_id]['true_fibrosis_tissue_enhancement_attribute'][0]
+            true_patients_overall = patient_dict[patient_id]['true_overall'][0]
+            
+            true_labels_dict["sharpness"].append(true_patients_sharpness_attribute)
+            true_labels_dict["myocardium_nulling"].append(true_patients_myocardium_nulling_attribute)
+            true_labels_dict["enhancement_of_fibrosis_tissue"].append(true_patients_fibrosis_tissue_enhancement_attribute)
+            true_labels_dict["overall"].append(true_patients_overall)
+
+            predicted_labels_dict["sharpness"].append(predicted_patients_sharpness_attribute)
+            predicted_labels_dict["myocardium_nulling"].append(predicted_patients_myocardium_nulling_attribute)
+            predicted_labels_dict["enhancement_of_fibrosis_tissue"].append(predicted_patients_fibrosis_tissue_enhancement_attribute)
+            predicted_labels_dict["overall"].append(predicted_patients_overall)
     return true_labels_dict, predicted_labels_dict
 
 
@@ -134,7 +171,7 @@ def get_model_output(image_filename, model):
     return preds.item()
 
 
-def plot_confusion_matrix(true_labels, pred_labels, title):
+def plot_confusion_matrix(true_labels, pred_labels, model_name, title):
     """
     Plot the confusion matrix
     :param title: str, title of the plot
@@ -142,11 +179,11 @@ def plot_confusion_matrix(true_labels, pred_labels, title):
     :param pred_labels: list of predicted labels
     :return: None
     """
-    cm = confusion_matrix(true_labels, pred_labels)
-    # make confusion matrix color blue
-    cm_display = ConfusionMatrixDisplay(cm, display_labels=[1, 2, 3, 4, 5])
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[int(i) for i in range(1, cm.shape[0] + 1)])
+    # check if path exists
+    path = os.path.abspath(os.path.join("results/confusion_matrix/", os.pardir))
+    
+    disp = ConfusionMatrixDisplay.from_predictions(true_labels, pred_labels)
     disp.plot(cmap="OrRd")
     plt.title(title)
-    plt.savefig(f"{title}.png")
-    plt.show()
+    plt.savefig(f"{path}/confusion_matrix/{model_name}_{title}_cf_matrix.png")
+    # plt.show()

@@ -2,6 +2,9 @@ import torch
 from torch import nn
 import segmentation_models_pytorch as smp
 
+from model.attribute_classifier import AttributeClassifier
+from model.overall_classifier import OverallClassifier
+
 
 class QCModel(nn.Module):
     def __init__(self, encoder, encoder_name, num_classes):
@@ -24,32 +27,41 @@ class QCModel(nn.Module):
         )
 
         self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
-        
-        linear1_out = int(encoder.out_channels[-1] / 4)
-        self.linear1 = nn.Linear(encoder.out_channels[-1], linear1_out)
 
-        linear2_out = int(linear1_out / 4)
-        self.linear2 = nn.Linear(linear1_out, linear2_out)
-        
+        self.attribute_sharpness = AttributeClassifier(encoder.out_channels[-1], num_classes)
+        self.attribute_myocardium_nulling = AttributeClassifier(encoder.out_channels[-1], num_classes)
+        self.attribute_fibrosis_tissue_enhancement = AttributeClassifier(encoder.out_channels[-1], num_classes)
+
+        no_of_attribute_out_channels = self.attribute_sharpness.output_layer.out_features * 3  # 3 attributes
+
+        self.overall_classifier = OverallClassifier(no_of_attribute_out_channels, num_classes)
+
         self.relu = nn.ReLU()
-        
-        self.output_layer = nn.Linear(linear2_out, num_classes - 1)
 
     def forward(self, x):
-        x = self.features(x)  # (batch_size, 2048, 16, 15)
+        x = self.features(x)  # (batch_size, 2048, 8, 8)
         if type(x) == list:
             x = x[-1]
 
         x = self.adaptive_pool(x)  # (batch_size, 2048, 1, 1)
-        x = x.view(x.size(0), -1)  # flatten (batch_size, 2048)
-        x = self.linear1(x)  # output shape: (batch_size, 512)
-        x = self.relu(x)  # Non-linearity
-        x = self.linear2(x)  # output shape: (batch_size, 128)
-        x = self.relu(x)  # Non-linearity
+        feature_space = x.view(x.size(0), -1)  # flatten (batch_size, 2048)
 
-        logits = self.output_layer(x)  # output shape: (batch_size, num_classes-1)
+        logits_of_sharpness_attribute = self.attribute_sharpness(feature_space)  # (batch_size, num_classes-1)
+        logits_of_myocardium_nulling_attribute = self.attribute_myocardium_nulling(
+            feature_space)  # (batch_size, num_classes-1)
+        logits_of_fibrosis_tissue_enhancement_attribute = self.attribute_fibrosis_tissue_enhancement(
+            feature_space)  # (batch_size, num_classes-1)
 
-        return logits
+        logits_of_attributes = torch.cat((logits_of_sharpness_attribute, logits_of_myocardium_nulling_attribute,
+                                          logits_of_fibrosis_tissue_enhancement_attribute),
+                                         dim=1)  # (batch_size, 3 * (num_classes-1))
+
+        logits_of_attributes = self.relu(logits_of_attributes)  # Non-linearity
+
+        logits_of_overall = self.overall_classifier(logits_of_attributes)  # (batch_size, num_classes-1)
+
+        return logits_of_sharpness_attribute, logits_of_myocardium_nulling_attribute, \
+            logits_of_fibrosis_tissue_enhancement_attribute, logits_of_overall
 
 
 if __name__ == '__main__':
@@ -62,7 +74,10 @@ if __name__ == '__main__':
 
     qc_model = QCModel(model.encoder, "resnet50", 5)
 
-    input = torch.randn(4, 1, 512, 480)
-    output = qc_model(input)
-    print(output.shape)
-
+    input = torch.randn(4, 1, 512, 480)  # (batch_size, channels, height, width)
+    logits_of_sharpness_attribute, logits_of_myocardium_nulling_attribute, logits_of_fibrosis_tissue_enhancement_attribute, logits_of_overall = qc_model(
+        input)
+    print(logits_of_sharpness_attribute.shape)
+    print(logits_of_myocardium_nulling_attribute.shape)
+    print(logits_of_fibrosis_tissue_enhancement_attribute.shape)
+    print(logits_of_overall.shape)
